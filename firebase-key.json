@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "417988970232",
+    "project_id": "autoacceptorapp",
+    "storage_bucket": "autoacceptorapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:417988970232:android:62047c5d42cb8167145d0d",
+        "android_client_info": {
+          "package_name": "com.example.autoacceptor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWCxINo64Lzyxwpjo7adIZycOg1tUFGxQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
