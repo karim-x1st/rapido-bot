@@ -156,6 +156,12 @@ def handle_approval(call):
         print(f"Approval Error: {e}")
 
 if __name__ == '__main__':
+    try:
+        bot.remove_webhook()
+        print("Webhook cleared successfully!")
+    except Exception as ex:
+        print(f"Webhook clear error: {ex}")
+
     Thread(target=run_flask).start()
     print("Bot is running on Render 24/7 $0 Free Plan...")
     bot.infinity_polling()
