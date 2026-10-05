@@ -21,15 +21,15 @@ def get_firestore_db():
     try:
         if firebase_admin._apps:
             return firestore.client()
-        
+
         key_file = "firebase-key.json"
         if os.path.exists(key_file):
             with open(key_file, 'r') as f:
                 key_data = json.load(f)
-            
+
             if "private_key" in key_data:
                 key_data["private_key"] = key_data["private_key"].replace("\\n", "\n")
-                
+
             cred = credentials.Certificate(key_data)
             firebase_admin.initialize_app(cred)
             return firestore.client()
@@ -38,7 +38,7 @@ def get_firestore_db():
         print(f"Firebase Init Error: {e}")
         return None
 
-# --- DUAL-FALLBACK FIRESTORE UPDATE ENGINE (100% UNBEATABLE) ---
+# --- DUAL-FALLBACK FIRESTORE UPDATE ENGINE (SEAMLESS DOCUMENT WRITE) ---
 def update_user_subscription(device_id, plan_code, expiry_ts):
     # Method 1: Try Firebase Admin SDK
     try:
@@ -51,13 +51,13 @@ def update_user_subscription(device_id, plan_code, expiry_ts):
                 "planName": plan_code
             }, merge=True)
             print("Successfully updated via Firebase Admin SDK!")
-            return True
+            return True, "Admin SDK Success"
     except Exception as e:
-        print(f"Admin SDK failed, trying Direct REST API fallback: {e}")
+        print(f"Admin SDK failed: {e}")
 
-    # Method 2: Direct Google Firestore REST API Fallback (0 Key / 0 JWT Dependency!)
+    # Method 2: Direct Google Firestore REST API Fallback
     try:
-        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}?updateMask.fieldPaths=isActive&updateMask.fieldPaths=expiryTimestamp&updateMask.fieldPaths=planName"
+        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}"
         payload = {
             "fields": {
                 "isActive": {"booleanValue": True},
@@ -68,13 +68,15 @@ def update_user_subscription(device_id, plan_code, expiry_ts):
         resp = requests.patch(url, json=payload, timeout=10)
         if resp.status_code in [200, 201]:
             print("Successfully updated via Direct Firestore REST API!")
-            return True
+            return True, "REST API Success"
         else:
-            print(f"REST API error {resp.status_code}: {resp.text}")
+            err_msg = f"HTTP {resp.status_code}: {resp.text}"
+            print(f"REST API Error: {err_msg}")
+            return False, err_msg
     except Exception as ex:
-        print(f"REST API Exception: {ex}")
-
-    return False
+        err_msg = f"REST Exception: {ex}"
+        print(err_msg)
+        return False, err_msg
 
 PLAN_DETAILS = {
     "BUY_7DAYS": {"name": "7 Days Plan", "price": 150, "days": 7},
@@ -108,9 +110,15 @@ def home():
 def handle_myid(message):
     bot.reply_to(message, f"👤 Your Telegram User ID: {message.from_user.id}")
 
+# --- ADMIN COMMAND: INSTANT 24-HOUR DEMO GRANT (STRICT ADMIN ONLY) ---
 @bot.message_handler(commands=['demo'])
 def handle_grant_demo(message):
     try:
+        # Strict Admin Security Check: Only Admin Telegram User ID can grant demo!
+        if message.from_user.id != ADMIN_TELEGRAM_ID:
+            bot.reply_to(message, "⛔ Access Denied! Only Admin can grant extra demo trials.")
+            return
+
         args = message.text.split()
         if len(args) < 2:
             bot.reply_to(message, "⚠️ Usage: /demo <DEVICE_ID>\nExample: /demo 815e3ed1ce8d80a8")
@@ -120,17 +128,17 @@ def handle_grant_demo(message):
         current_time_ms = int(time.time() * 1000)
         demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000)
 
-        success = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", demo_expiry_ts)
+        success, msg = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", demo_expiry_ts)
         if success:
             bot.reply_to(
-                message, 
+                message,
                 f"✅ 24-HOUR EXTRA DEMO GRANTED!\n\n"
                 f"📱 Device ID: {device_id}\n"
                 f"⏳ Expiry: 24 Hours from current moment\n\n"
                 f"Customer app open karega to 24h countdown live start ho jayega!"
             )
         else:
-            bot.reply_to(message, "❌ Error updating Firestore database!")
+            bot.reply_to(message, f"❌ Error updating Firestore: {msg}")
     except Exception as ex:
         bot.reply_to(message, f"❌ Demo Error: {ex}")
 
@@ -178,7 +186,7 @@ def handle_start(message):
                     return
 
         bot.send_message(
-            message.chat.id, 
+            message.chat.id,
             "🚖 Welcome to Rapido Auto Acceptor Bot!\n\nApp me Membership Plans par jaakar plan select karein to buy subscription."
         )
     except Exception as e:
@@ -219,7 +227,7 @@ def handle_approval(call):
         current_time_ms = int(time.time() * 1000)
         expiry_ts = -1 if plan["days"] == -1 else current_time_ms + (plan["days"] * 24 * 60 * 60 * 1000)
 
-        success = update_user_subscription(device_id, plan_code, expiry_ts)
+        success, msg = update_user_subscription(device_id, plan_code, expiry_ts)
         if success:
             bot.edit_message_text(
                 f"✅ APPROVED & ACTIVATED IN FIREBASE!\n\n"
@@ -237,7 +245,7 @@ def handle_approval(call):
                 f"App open karein aur Rapido Auto Acceptor chalu karein. Happy Riding! 🚖⚡"
             )
         else:
-            bot.answer_callback_query(call.id, "Error updating Firestore!")
+            bot.answer_callback_query(call.id, f"Error updating Firestore: {msg}")
     except Exception as e:
         print(f"Approval Error: {e}")
 
