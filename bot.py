@@ -59,38 +59,40 @@ def home():
 
 @bot.message_handler(commands=['myid'])
 def handle_myid(message):
-    bot.reply_to(message, f"👤 *Your Telegram User ID:* `{message.from_user.id}`", parse_mode="Markdown")
+    bot.reply_to(message, f"👤 Your Telegram User ID: {message.from_user.id}")
 
 @bot.message_handler(commands=['demo'])
 def handle_grant_demo(message):
-    args = message.text.split()
-    if len(args) < 2:
-        bot.reply_to(message, "⚠️ *Usage:* `/demo <DEVICE_ID>`\nExample: `/demo 815e3ed1ce8d80a8`", parse_mode="Markdown")
-        return
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ Usage: /demo <DEVICE_ID>\nExample: /demo 815e3ed1ce8d80a8")
+            return
 
-    device_id = args[1].strip()
-    current_time_ms = int(time.time() * 1000)
-    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000)
+        device_id = args[1].strip()
+        current_time_ms = int(time.time() * 1000)
+        demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000)
 
-    db_client = get_firestore_db()
-    if db_client:
-        user_ref = db_client.collection("users").document(device_id)
-        user_ref.set({
-            "isActive": True,
-            "expiryTimestamp": demo_expiry_ts,
-            "planName": "1_DAY_FREE_TRIAL"
-        }, merge=True)
+        db_client = get_firestore_db()
+        if db_client:
+            user_ref = db_client.collection("users").document(device_id)
+            user_ref.set({
+                "isActive": True,
+                "expiryTimestamp": demo_expiry_ts,
+                "planName": "1_DAY_FREE_TRIAL"
+            }, merge=True)
 
-        bot.reply_to(
-            message, 
-            f"✅ *24-HOUR EXTRA DEMO GRANTED!*\n\n"
-            f"📱 *Device ID:* `{device_id}`\n"
-            f"⏳ *Expiry:* 24 Hours from current moment\n\n"
-            f"_Customer app open karega to 24h countdown live start ho jayega!_",
-            parse_mode="Markdown"
-        )
-    else:
-        bot.reply_to(message, "❌ *Firebase Key File Missing on Server!*")
+            bot.reply_to(
+                message, 
+                f"✅ 24-HOUR EXTRA DEMO GRANTED!\n\n"
+                f"📱 Device ID: {device_id}\n"
+                f"⏳ Expiry: 24 Hours from current moment\n\n"
+                f"Customer app open karega to 24h countdown live start ho jayega!"
+            )
+        else:
+            bot.reply_to(message, "❌ Firebase Key File Missing on Server!")
+    except Exception as ex:
+        bot.reply_to(message, f"❌ Demo Error: {ex}")
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -104,59 +106,58 @@ def handle_start(message):
                 device_id = parts[2]
                 if plan_key in PLAN_DETAILS:
                     plan = PLAN_DETAILS[plan_key]
-                    msg = f"🚖 *RAPIDO AUTO ACCEPTOR BOT*\n\n" \
-                          f"📌 *Selected Plan:* {plan['name']}\n" \
-                          f"💰 *Amount to Pay:* ₹{plan['price']}\n" \
-                          f"📱 *Device ID:* `{device_id}`\n\n" \
-                          f"💳 *UPI ID:* `{YOUR_UPI_ID}`\n\n" \
-                          f"👇 *Next Steps:*\n" \
+                    msg = f"🚖 RAPIDO AUTO ACCEPTOR BOT\n\n" \
+                          f"📌 Selected Plan: {plan['name']}\n" \
+                          f"💰 Amount to Pay: ₹{plan['price']}\n" \
+                          f"📱 Device ID: {device_id}\n\n" \
+                          f"💳 UPI ID: {YOUR_UPI_ID}\n\n" \
+                          f"👇 Next Steps:\n" \
                           f"1. Is QR Code / UPI ID par ₹{plan['price']} pay karein.\n" \
                           f"2. Payment Screenshot yahan bhej dein!\n\n" \
-                          f"_Payment verify hote hi 5 second me aapka plan active ho jayega!_"
+                          f"Payment verify hote hi 5 second me aapka plan active ho jayega!"
 
                     qr_file_path = "qr.png" if os.path.exists("qr.png") else ("qr.jpg" if os.path.exists("qr.jpg") else None)
                     if qr_file_path:
                         with open(qr_file_path, "rb") as qr_img:
-                            bot.send_photo(message.chat.id, qr_img, caption=msg, parse_mode="Markdown")
+                            bot.send_photo(message.chat.id, qr_img, caption=msg)
                     else:
-                        bot.send_message(message.chat.id, msg, parse_mode="Markdown")
+                        bot.send_message(message.chat.id, msg)
 
-                    admin_msg = f"🚨 *NEW BUY ORDER RECEIVED!*\n\n" \
-                                f"👤 *User:* @{message.from_user.username or 'NoUsername'} (ID: {message.from_user.id})\n" \
-                                f"📦 *Plan:* {plan['name']} (₹{plan['price']})\n" \
-                                f"📱 *Device ID:* `{device_id}`"
+                    admin_msg = f"🚨 NEW BUY ORDER RECEIVED!\n\n" \
+                                f"👤 User: @{message.from_user.username or 'NoUsername'} (ID: {message.from_user.id})\n" \
+                                f"📦 Plan: {plan['name']} (₹{plan['price']})\n" \
+                                f"📱 Device ID: {device_id}"
 
                     markup = InlineKeyboardMarkup()
                     markup.add(InlineKeyboardButton(f"✅ Approve {plan['name']}", callback_data=f"approve_{parts[1]}_{device_id}_{message.chat.id}"))
 
                     try:
-                        bot.send_message(ADMIN_TELEGRAM_ID, admin_msg, parse_mode="Markdown", reply_markup=markup)
+                        bot.send_message(ADMIN_TELEGRAM_ID, admin_msg, reply_markup=markup)
                     except Exception:
                         pass
                     return
 
         bot.send_message(
             message.chat.id, 
-            "🚖 *Welcome to Rapido Auto Acceptor Bot!*\n\nApp me *Membership Plans* par jaakar plan select karein to buy subscription.",
-            parse_mode="Markdown"
+            "🚖 Welcome to Rapido Auto Acceptor Bot!\n\nApp me Membership Plans par jaakar plan select karein to buy subscription."
         )
     except Exception as e:
         print(f"Start Error: {e}")
 
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_payment_screenshot(message):
-    user_info = f"📸 *NEW PAYMENT SCREENSHOT RECEIVED!*\n\n" \
-                f"👤 *From User:* @{message.from_user.username or 'NoUsername'} (ID: {message.from_user.id})\n" \
-                f"💬 *Caption/Text:* {message.caption or 'No caption'}"
+    user_info = f"📸 NEW PAYMENT SCREENSHOT RECEIVED!\n\n" \
+                f"👤 From User: @{message.from_user.username or 'NoUsername'} (ID: {message.from_user.id})\n" \
+                f"💬 Caption/Text: {message.caption or 'No caption'}"
     try:
         if message.photo:
             file_id = message.photo[-1].file_id
-            bot.send_photo(ADMIN_TELEGRAM_ID, file_id, caption=user_info, parse_mode="Markdown")
+            bot.send_photo(ADMIN_TELEGRAM_ID, file_id, caption=user_info)
         elif message.document:
             file_id = message.document.file_id
-            bot.send_document(ADMIN_TELEGRAM_ID, file_id, caption=user_info, parse_mode="Markdown")
+            bot.send_document(ADMIN_TELEGRAM_ID, file_id, caption=user_info)
 
-        bot.reply_to(message, "✅ *Payment Screenshot Received!*\nAdmin is verifying your payment. Your plan will be activated within 5 minutes!")
+        bot.reply_to(message, "✅ Payment Screenshot Received!\nAdmin is verifying your payment. Your plan will be activated within 5 minutes!")
     except Exception:
         pass
 
@@ -188,21 +189,19 @@ def handle_approval(call):
             }, merge=True)
 
             bot.edit_message_text(
-                f"✅ *APPROVED & ACTIVATED IN FIREBASE!*\n\n"
-                f"📱 *Device ID:* `{device_id}`\n"
-                f"📦 *Plan:* {plan['name']}",
+                f"✅ APPROVED & ACTIVATED IN FIREBASE!\n\n"
+                f"📱 Device ID: {device_id}\n"
+                f"📦 Plan: {plan['name']}",
                 call.message.chat.id,
-                call.message.message_id,
-                parse_mode="Markdown"
+                call.message.message_id
             )
             bot.answer_callback_query(call.id, "Subscription Activated in Firebase!")
 
             bot.send_message(
                 user_chat_id,
-                f"🎉 *CONGRATULATIONS!*\n\n"
-                f"Aapka *{plan['name']}* 100% Activate ho gaya hai!\n"
-                f"App open karein aur Rapido Auto Acceptor chalu karein. Happy Riding! 🚖⚡",
-                parse_mode="Markdown"
+                f"🎉 CONGRATULATIONS!\n\n"
+                f"Aapka {plan['name']} 100% Activate ho gaya hai!\n"
+                f"App open karein aur Rapido Auto Acceptor chalu karein. Happy Riding! 🚖⚡"
             )
         else:
             bot.answer_callback_query(call.id, "Error: Firebase Key File Missing on Server!")
