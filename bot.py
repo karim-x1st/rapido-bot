@@ -13,18 +13,29 @@ YOUR_UPI_ID = "ahm5646@ptyes"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- SMART FIREBASE INITIALIZER ---
+# --- SMART FIREBASE INITIALIZER (SPECIFIC SERVICE ACCOUNT FINDER) ---
 def get_firestore_db():
     try:
         if firebase_admin._apps:
             return firestore.client()
-        json_files = [f for f in os.listdir('.') if f.endswith('.json')]
-        key_file = json_files[0] if json_files else None
-        if key_file:
+        
+        # Look specifically for service account key file, ignoring google-services.json
+        key_file = "firebase-key.json"
+        if not os.path.exists(key_file):
+            json_files = [f for f in os.listdir('.') if f.endswith('.json')]
+            for f in json_files:
+                if "service" in f.lower() or "admin" in f.lower() or "firebase-key" in f.lower():
+                    key_file = f
+                    break
+        
+        if os.path.exists(key_file):
+            print(f"Initializing Firebase using: {key_file}")
             cred = credentials.Certificate(key_file)
             firebase_admin.initialize_app(cred)
             return firestore.client()
-        return None
+        else:
+            print("firebase-key.json not found!")
+            return None
     except Exception as e:
         print(f"Firebase Init Error: {e}")
         return None
