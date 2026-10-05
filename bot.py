@@ -17,7 +17,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
-BOT_TOKEN = "8784908427:AAF1dkzSXxFWGK67oQ3EuInKW1QdR_WjejM"
+BOT_TOKEN = "8784908427:AAF4j1GIIDzIFDmXpQ74zXyQIIF9lJeircw"
 ADMIN_TELEGRAM_ID = 1133405803
 YOUR_UPI_ID = "ahm5646@ptyes"
 
