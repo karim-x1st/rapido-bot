@@ -21,15 +21,15 @@ def get_firestore_db():
     try:
         if firebase_admin._apps:
             return firestore.client()
-        
+
         key_file = "firebase-key.json"
         if os.path.exists(key_file):
             with open(key_file, 'r') as f:
                 key_data = json.load(f)
-            
+
             if "private_key" in key_data:
                 key_data["private_key"] = key_data["private_key"].replace("\\n", "\n")
-                
+
             cred = credentials.Certificate(key_data)
             firebase_admin.initialize_app(cred)
             return firestore.client()
@@ -70,7 +70,7 @@ def update_user_subscription(device_id, plan_code, expiry_ts):
         if resp.status_code in [200, 201]:
             print("Successfully updated via Direct Firestore REST API!")
             return True, "REST API Success"
-        
+
         # Fallback Method 3: Post Overwrite
         url_no_mask = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}"
         resp2 = requests.post(url_no_mask, json=payload, timeout=10)
@@ -116,6 +116,77 @@ def home():
 def handle_myid(message):
     bot.reply_to(message, f"👤 Your Telegram User ID: {message.from_user.id}")
 
+# --- ADMIN COMMAND: INSTANT LIFETIME VIP GRANT ---
+@bot.message_handler(commands=['lifetime'])
+def handle_grant_lifetime(message):
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "⚠️ Usage: /lifetime <DEVICE_ID>\nExample: /lifetime 815e3ed1ce8d80a8")
+        return
+    device_id = args[1].strip()
+    success, msg = update_user_subscription(device_id, "LIFETIME", -1)
+    if success:
+        bot.reply_to(
+            message,
+            f"👑 LIFETIME VIP ACCESS GRANTED!\n\n"
+            f"📱 Device ID: {device_id}\n"
+            f"♾️ Expiry: Permanent Lifetime Access (No Expiry)\n\n"
+            f"Customer app open karega to VIP Lifetime status active ho jayega!"
+        )
+    else:
+        bot.reply_to(message, f"❌ Error: {msg}")
+
+# --- ADMIN COMMAND: INSTANT CUSTOM DAYS GRANT ---
+@bot.message_handler(commands=['days'])
+def handle_grant_days(message):
+    args = message.text.split()
+    if len(args) < 3:
+        bot.reply_to(message, "⚠️ Usage: /days <DEVICE_ID> <NUM_DAYS>\nExample: /days 815e3ed1ce8d80a8 30")
+        return
+    device_id = args[1].strip()
+    try:
+        num_days = int(args[2].strip())
+    except ValueError:
+        bot.reply_to(message, "⚠️ Invalid number of days!")
+        return
+
+    current_time_ms = int(time.time() * 1000)
+    expiry_ts = current_time_ms + (num_days * 24 * 60 * 60 * 1000)
+    plan_code = "30DAYS" if num_days >= 28 else ("15DAYS" if num_days >= 14 else "7DAYS")
+
+    success, msg = update_user_subscription(device_id, plan_code, expiry_ts)
+    if success:
+        bot.reply_to(
+            message,
+            f"✅ {num_days}-DAYS SUBSCRIPTION GRANTED!\n\n"
+            f"📱 Device ID: {device_id}\n"
+            f"⏳ Expiry: {num_days} Days from current moment"
+        )
+    else:
+        bot.reply_to(message, f"❌ Error: {msg}")
+
+# --- ADMIN COMMAND: INSTANT EXPIRE / LOCK DEVICE ---
+@bot.message_handler(commands=['expire'])
+def handle_expire_device(message):
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "⚠️ Usage: /expire <DEVICE_ID>\nExample: /expire 815e3ed1ce8d80a8")
+        return
+    device_id = args[1].strip()
+    current_time_ms = int(time.time() * 1000) - 1000 # Expired in past
+
+    success, msg = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", current_time_ms)
+    if success:
+        bot.reply_to(
+            message,
+            f"🔴 DEVICE EXPIRED & LOCKED!\n\n"
+            f"📱 Device ID: {device_id}\n"
+            f"🔒 Status: Expired / Inactive"
+        )
+    else:
+        bot.reply_to(message, f"❌ Error: {msg}")
+
+# --- ADMIN COMMAND: INSTANT 24-HOUR DEMO GRANT ---
 @bot.message_handler(commands=['demo'])
 def handle_grant_demo(message):
     try:
@@ -131,7 +202,7 @@ def handle_grant_demo(message):
         success, msg = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", demo_expiry_ts)
         if success:
             bot.reply_to(
-                message, 
+                message,
                 f"✅ 24-HOUR EXTRA DEMO GRANTED!\n\n"
                 f"📱 Device ID: {device_id}\n"
                 f"⏳ Expiry: 24 Hours from current moment\n\n"
@@ -186,7 +257,7 @@ def handle_start(message):
                     return
 
         bot.send_message(
-            message.chat.id, 
+            message.chat.id,
             "🚖 Welcome to Rapido Auto Acceptor Bot!\n\nApp me Membership Plans par jaakar plan select karein to buy subscription."
         )
     except Exception as e:
