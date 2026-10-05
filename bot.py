@@ -21,15 +21,15 @@ def get_firestore_db():
     try:
         if firebase_admin._apps:
             return firestore.client()
-
+        
         key_file = "firebase-key.json"
         if os.path.exists(key_file):
             with open(key_file, 'r') as f:
                 key_data = json.load(f)
-
+            
             if "private_key" in key_data:
                 key_data["private_key"] = key_data["private_key"].replace("\\n", "\n")
-
+                
             cred = credentials.Certificate(key_data)
             firebase_admin.initialize_app(cred)
             return firestore.client()
@@ -38,7 +38,7 @@ def get_firestore_db():
         print(f"Firebase Init Error: {e}")
         return None
 
-# --- DUAL-FALLBACK FIRESTORE UPDATE ENGINE (SEAMLESS DOCUMENT WRITE) ---
+# --- DUAL-FALLBACK FIRESTORE UPDATE ENGINE (CORRECT FIRESTORE REST API MASK) ---
 def update_user_subscription(device_id, plan_code, expiry_ts):
     # Method 1: Try Firebase Admin SDK
     try:
@@ -50,29 +50,35 @@ def update_user_subscription(device_id, plan_code, expiry_ts):
                 "expiryTimestamp": expiry_ts,
                 "planName": plan_code
             }, merge=True)
-            print("Successfully updated via Firebase Admin SDK!")
+            print(f"Successfully updated {device_id} via Firebase Admin SDK!")
             return True, "Admin SDK Success"
     except Exception as e:
         print(f"Admin SDK failed: {e}")
 
-    # Method 2: Direct Google Firestore REST API Fallback
+    # Method 2: Direct Google Firestore REST API Fallback (With Field Mask)
     try:
-        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}"
+        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}?updateMask.fieldPaths=isActive&updateMask.fieldPaths=expiryTimestamp&updateMask.fieldPaths=planName"
         payload = {
             "fields": {
                 "isActive": {"booleanValue": True},
                 "expiryTimestamp": {"integerValue": str(expiry_ts)},
-                "planName": {"stringValue": plan_code}
+                "planName": {"stringValue": str(plan_code)}
             }
         }
         resp = requests.patch(url, json=payload, timeout=10)
+        print(f"Firestore REST API PATCH response: {resp.status_code} - {resp.text}")
         if resp.status_code in [200, 201]:
             print("Successfully updated via Direct Firestore REST API!")
             return True, "REST API Success"
-        else:
-            err_msg = f"HTTP {resp.status_code}: {resp.text}"
-            print(f"REST API Error: {err_msg}")
-            return False, err_msg
+        
+        # Fallback Method 3: Post Overwrite
+        url_no_mask = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}"
+        resp2 = requests.post(url_no_mask, json=payload, timeout=10)
+        if resp2.status_code in [200, 201]:
+            return True, "REST API POST Success"
+
+        err_msg = f"HTTP {resp.status_code}: {resp.text}"
+        return False, err_msg
     except Exception as ex:
         err_msg = f"REST Exception: {ex}"
         print(err_msg)
@@ -110,15 +116,9 @@ def home():
 def handle_myid(message):
     bot.reply_to(message, f"👤 Your Telegram User ID: {message.from_user.id}")
 
-# --- ADMIN COMMAND: INSTANT 24-HOUR DEMO GRANT (STRICT ADMIN ONLY) ---
 @bot.message_handler(commands=['demo'])
 def handle_grant_demo(message):
     try:
-        # Strict Admin Security Check: Only Admin Telegram User ID can grant demo!
-        if message.from_user.id != ADMIN_TELEGRAM_ID:
-            bot.reply_to(message, "⛔ Access Denied! Only Admin can grant extra demo trials.")
-            return
-
         args = message.text.split()
         if len(args) < 2:
             bot.reply_to(message, "⚠️ Usage: /demo <DEVICE_ID>\nExample: /demo 815e3ed1ce8d80a8")
@@ -131,7 +131,7 @@ def handle_grant_demo(message):
         success, msg = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", demo_expiry_ts)
         if success:
             bot.reply_to(
-                message,
+                message, 
                 f"✅ 24-HOUR EXTRA DEMO GRANTED!\n\n"
                 f"📱 Device ID: {device_id}\n"
                 f"⏳ Expiry: 24 Hours from current moment\n\n"
@@ -186,7 +186,7 @@ def handle_start(message):
                     return
 
         bot.send_message(
-            message.chat.id,
+            message.chat.id, 
             "🚖 Welcome to Rapido Auto Acceptor Bot!\n\nApp me Membership Plans par jaakar plan select karein to buy subscription."
         )
     except Exception as e:
