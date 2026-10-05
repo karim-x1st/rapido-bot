@@ -7,7 +7,6 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# --- TINY FLASK WEB SERVER FOR RENDER $0 FREE PLAN ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -18,22 +17,39 @@ def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
-# --- TELEGRAM BOT & FIREBASE LOGIC ---
 BOT_TOKEN = "8784908427:AAF1dkzSXxFWGK67oQ3EuInKW1QdR_WjejM"
 ADMIN_TELEGRAM_ID = 1133405803
 YOUR_UPI_ID = "ahm5646@ptyes"
 
-try:
-    if os.path.exists("firebase-key.json"):
-        cred = credentials.Certificate("firebase-key.json")
-        firebase_admin.initialize_app(cred)
-        db = firestore.client()
-        print("Firebase Connected!")
-    else:
-        db = None
-except Exception as e:
-    db = None
+# --- SMART FIREBASE INITIALIZER ---
+def get_firestore_db():
+    try:
+        if firebase_admin._apps:
+            return firestore.client()
+        
+        json_files = [f for f in os.listdir('.') if f.endswith('.json')]
+        key_file = None
+        for f in json_files:
+            if "firebase" in f.lower() or "key" in f.lower() or "service" in f.lower() or "auto" in f.lower():
+                key_file = f
+                break
+        
+        if not key_file and json_files:
+            key_file = json_files[0]
+            
+        if key_file:
+            print(f"Initializing Firebase using: {key_file}")
+            cred = credentials.Certificate(key_file)
+            firebase_admin.initialize_app(cred)
+            return firestore.client()
+        else:
+            print("No JSON Key File Found in directory!")
+            return None
+    except Exception as e:
+        print(f"Firebase Init Error: {e}")
+        return None
 
+db = get_firestore_db()
 bot = telebot.TeleBot(BOT_TOKEN)
 
 PLAN_DETAILS = {
@@ -56,10 +72,11 @@ def handle_grant_demo(message):
 
     device_id = args[1].strip()
     current_time_ms = int(time.time() * 1000)
-    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000) # Exact 24 Hours from current moment
+    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000) # Exact 24 Hours from now
 
-    if db:
-        user_ref = db.collection("users").document(device_id)
+    db_client = get_firestore_db()
+    if db_client:
+        user_ref = db_client.collection("users").document(device_id)
         user_ref.set({
             "isActive": True,
             "expiryTimestamp": demo_expiry_ts,
@@ -67,15 +84,15 @@ def handle_grant_demo(message):
         }, merge=True)
 
         bot.reply_to(
-            message,
+            message, 
             f"✅ *24-HOUR EXTRA DEMO GRANTED!*\n\n"
             f"📱 *Device ID:* `{device_id}`\n"
-            f"⏳ *Expiry:* 24 Hours from now\n\n"
+            f"⏳ *Expiry:* 24 Hours from current moment\n\n"
             f"_Customer app open karega to 24h countdown live start ho jayega!_",
             parse_mode="Markdown"
         )
     else:
-        bot.reply_to(message, "❌ Firebase connection error!")
+        bot.reply_to(message, "❌ *Firebase Key File Missing on GitHub!*\nPlease upload your Firebase JSON key file (`firebase-key.json`) to your GitHub repository.")
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -121,7 +138,7 @@ def handle_start(message):
                     return
 
         bot.send_message(
-            message.chat.id,
+            message.chat.id, 
             "🚖 *Welcome to Rapido Auto Acceptor Bot!*\n\nApp me *Membership Plans* par jaakar plan select karein to buy subscription.",
             parse_mode="Markdown"
         )
@@ -163,8 +180,9 @@ def handle_approval(call):
         current_time_ms = int(time.time() * 1000)
         expiry_ts = -1 if plan["days"] == -1 else current_time_ms + (plan["days"] * 24 * 60 * 60 * 1000)
 
-        if db:
-            user_ref = db.collection("users").document(device_id)
+        db_client = get_firestore_db()
+        if db_client:
+            user_ref = db_client.collection("users").document(device_id)
             user_ref.set({
                 "isActive": True,
                 "expiryTimestamp": expiry_ts,
@@ -188,6 +206,8 @@ def handle_approval(call):
                 f"App open karein aur Rapido Auto Acceptor chalu karein. Happy Riding! 🚖⚡",
                 parse_mode="Markdown"
             )
+        else:
+            bot.answer_callback_query(call.id, "Error: Firebase Key File Missing on Server!")
     except Exception as e:
         print(f"Approval Error: {e}")
 
