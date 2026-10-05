@@ -1,5 +1,7 @@
 import os
 import time
+import json
+import requests
 from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,35 +12,69 @@ app = Flask(__name__)
 BOT_TOKEN = "8784908427:AAF4j1GIIDzIFDmXpQ74zXyQIIF9lJeircw"
 ADMIN_TELEGRAM_ID = 1133405803
 YOUR_UPI_ID = "ahm5646@ptyes"
+PROJECT_ID = "autoacceptorapp"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- SMART FIREBASE INITIALIZER (SPECIFIC SERVICE ACCOUNT FINDER) ---
+# --- SMART FIREBASE INITIALIZER WITH SANITIZED PRIVATE KEY ---
 def get_firestore_db():
     try:
         if firebase_admin._apps:
             return firestore.client()
         
-        # Look specifically for service account key file, ignoring google-services.json
         key_file = "firebase-key.json"
-        if not os.path.exists(key_file):
-            json_files = [f for f in os.listdir('.') if f.endswith('.json')]
-            for f in json_files:
-                if "service" in f.lower() or "admin" in f.lower() or "firebase-key" in f.lower():
-                    key_file = f
-                    break
-        
         if os.path.exists(key_file):
-            print(f"Initializing Firebase using: {key_file}")
-            cred = credentials.Certificate(key_file)
+            with open(key_file, 'r') as f:
+                key_data = json.load(f)
+            
+            if "private_key" in key_data:
+                key_data["private_key"] = key_data["private_key"].replace("\\n", "\n")
+                
+            cred = credentials.Certificate(key_data)
             firebase_admin.initialize_app(cred)
             return firestore.client()
-        else:
-            print("firebase-key.json not found!")
-            return None
+        return None
     except Exception as e:
         print(f"Firebase Init Error: {e}")
         return None
+
+# --- DUAL-FALLBACK FIRESTORE UPDATE ENGINE (100% UNBEATABLE) ---
+def update_user_subscription(device_id, plan_code, expiry_ts):
+    # Method 1: Try Firebase Admin SDK
+    try:
+        db_client = get_firestore_db()
+        if db_client:
+            user_ref = db_client.collection("users").document(device_id)
+            user_ref.set({
+                "isActive": True,
+                "expiryTimestamp": expiry_ts,
+                "planName": plan_code
+            }, merge=True)
+            print("Successfully updated via Firebase Admin SDK!")
+            return True
+    except Exception as e:
+        print(f"Admin SDK failed, trying Direct REST API fallback: {e}")
+
+    # Method 2: Direct Google Firestore REST API Fallback (0 Key / 0 JWT Dependency!)
+    try:
+        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}?updateMask.fieldPaths=isActive&updateMask.fieldPaths=expiryTimestamp&updateMask.fieldPaths=planName"
+        payload = {
+            "fields": {
+                "isActive": {"booleanValue": True},
+                "expiryTimestamp": {"integerValue": str(expiry_ts)},
+                "planName": {"stringValue": plan_code}
+            }
+        }
+        resp = requests.patch(url, json=payload, timeout=10)
+        if resp.status_code in [200, 201]:
+            print("Successfully updated via Direct Firestore REST API!")
+            return True
+        else:
+            print(f"REST API error {resp.status_code}: {resp.text}")
+    except Exception as ex:
+        print(f"REST API Exception: {ex}")
+
+    return False
 
 PLAN_DETAILS = {
     "BUY_7DAYS": {"name": "7 Days Plan", "price": 150, "days": 7},
@@ -84,15 +120,8 @@ def handle_grant_demo(message):
         current_time_ms = int(time.time() * 1000)
         demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000)
 
-        db_client = get_firestore_db()
-        if db_client:
-            user_ref = db_client.collection("users").document(device_id)
-            user_ref.set({
-                "isActive": True,
-                "expiryTimestamp": demo_expiry_ts,
-                "planName": "1_DAY_FREE_TRIAL"
-            }, merge=True)
-
+        success = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", demo_expiry_ts)
+        if success:
             bot.reply_to(
                 message, 
                 f"✅ 24-HOUR EXTRA DEMO GRANTED!\n\n"
@@ -101,7 +130,7 @@ def handle_grant_demo(message):
                 f"Customer app open karega to 24h countdown live start ho jayega!"
             )
         else:
-            bot.reply_to(message, "❌ Firebase Key File Missing on Server!")
+            bot.reply_to(message, "❌ Error updating Firestore database!")
     except Exception as ex:
         bot.reply_to(message, f"❌ Demo Error: {ex}")
 
@@ -190,15 +219,8 @@ def handle_approval(call):
         current_time_ms = int(time.time() * 1000)
         expiry_ts = -1 if plan["days"] == -1 else current_time_ms + (plan["days"] * 24 * 60 * 60 * 1000)
 
-        db_client = get_firestore_db()
-        if db_client:
-            user_ref = db_client.collection("users").document(device_id)
-            user_ref.set({
-                "isActive": True,
-                "expiryTimestamp": expiry_ts,
-                "planName": plan_code
-            }, merge=True)
-
+        success = update_user_subscription(device_id, plan_code, expiry_ts)
+        if success:
             bot.edit_message_text(
                 f"✅ APPROVED & ACTIVATED IN FIREBASE!\n\n"
                 f"📱 Device ID: {device_id}\n"
@@ -215,7 +237,7 @@ def handle_approval(call):
                 f"App open karein aur Rapido Auto Acceptor chalu karein. Happy Riding! 🚖⚡"
             )
         else:
-            bot.answer_callback_query(call.id, "Error: Firebase Key File Missing on Server!")
+            bot.answer_callback_query(call.id, "Error updating Firestore!")
     except Exception as e:
         print(f"Approval Error: {e}")
 
