@@ -1,56 +1,33 @@
 import os
 import time
-from threading import Thread
-from flask import Flask
+from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Rapido Bot Running 24/7 Free on Render!"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
 BOT_TOKEN = "8784908427:AAF4j1GIIDzIFDmXpQ74zXyQIIF9lJeircw"
 ADMIN_TELEGRAM_ID = 1133405803
 YOUR_UPI_ID = "ahm5646@ptyes"
+
+bot = telebot.TeleBot(BOT_TOKEN)
 
 # --- SMART FIREBASE INITIALIZER ---
 def get_firestore_db():
     try:
         if firebase_admin._apps:
             return firestore.client()
-        
         json_files = [f for f in os.listdir('.') if f.endswith('.json')]
-        key_file = None
-        for f in json_files:
-            if "firebase" in f.lower() or "key" in f.lower() or "service" in f.lower() or "auto" in f.lower():
-                key_file = f
-                break
-        
-        if not key_file and json_files:
-            key_file = json_files[0]
-            
+        key_file = json_files[0] if json_files else None
         if key_file:
-            print(f"Initializing Firebase using: {key_file}")
             cred = credentials.Certificate(key_file)
             firebase_admin.initialize_app(cred)
             return firestore.client()
-        else:
-            print("No JSON Key File Found in directory!")
-            return None
+        return None
     except Exception as e:
         print(f"Firebase Init Error: {e}")
         return None
-
-db = get_firestore_db()
-bot = telebot.TeleBot(BOT_TOKEN)
 
 PLAN_DETAILS = {
     "BUY_7DAYS": {"name": "7 Days Plan", "price": 150, "days": 7},
@@ -59,12 +36,31 @@ PLAN_DETAILS = {
     "BUY_LIFETIME": {"name": "Lifetime VIP Access", "price": 4500, "days": -1}
 }
 
-# --- COMMAND TO CHECK TELEGRAM USER ID ---
+# --- WEBHOOK ROUTE FOR RENDER ---
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    try:
+        if request.headers.get('content-type') == 'application/json':
+            json_string = request.get_data().decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+    except Exception as e:
+        print(f"Webhook error: {e}")
+    return 'OK', 200
+
+@app.route('/')
+def home():
+    try:
+        render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://rapido-bot.onrender.com")
+        bot.set_webhook(url=f"{render_url}/webhook")
+        return f"Rapido Bot Webhook Active on {render_url}!"
+    except Exception as e:
+        return f"Render Bot Running! Webhook error: {e}"
+
 @bot.message_handler(commands=['myid'])
 def handle_myid(message):
     bot.reply_to(message, f"👤 *Your Telegram User ID:* `{message.from_user.id}`", parse_mode="Markdown")
 
-# --- ADMIN COMMAND: INSTANT 24-HOUR DEMO GRANT ---
 @bot.message_handler(commands=['demo'])
 def handle_grant_demo(message):
     args = message.text.split()
@@ -74,7 +70,7 @@ def handle_grant_demo(message):
 
     device_id = args[1].strip()
     current_time_ms = int(time.time() * 1000)
-    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000) # Exact 24 Hours from current moment
+    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000)
 
     db_client = get_firestore_db()
     if db_client:
@@ -94,7 +90,7 @@ def handle_grant_demo(message):
             parse_mode="Markdown"
         )
     else:
-        bot.reply_to(message, "❌ *Firebase Key File Missing on Server!*\nPlease upload your Firebase JSON key file (`firebase-key.json`) to your GitHub repository.")
+        bot.reply_to(message, "❌ *Firebase Key File Missing on Server!*")
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -214,12 +210,5 @@ def handle_approval(call):
         print(f"Approval Error: {e}")
 
 if __name__ == '__main__':
-    try:
-        bot.remove_webhook()
-        print("Webhook cleared successfully!")
-    except Exception as ex:
-        print(f"Webhook clear error: {ex}")
-
-    Thread(target=run_flask).start()
-    print("Bot is running on Render 24/7 $0 Free Plan...")
-    bot.infinity_polling()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
