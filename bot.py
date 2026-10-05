@@ -7,6 +7,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+# --- TINY FLASK WEB SERVER FOR RENDER $0 FREE PLAN ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -17,6 +18,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
+# --- TELEGRAM BOT & FIREBASE LOGIC ---
 BOT_TOKEN = "8784908427:AAF1dkzSXxFWGK67oQ3EuInKW1QdR_WjejM"
 ADMIN_TELEGRAM_ID = 1133405803
 YOUR_UPI_ID = "ahm5646@ptyes"
@@ -40,6 +42,40 @@ PLAN_DETAILS = {
     "BUY_30DAYS": {"name": "1 Month Plan (30 Days)", "price": 450, "days": 30},
     "BUY_LIFETIME": {"name": "Lifetime VIP Access", "price": 4500, "days": -1}
 }
+
+# --- ADMIN COMMAND: INSTANT 24-HOUR DEMO GRANT ---
+@bot.message_handler(commands=['demo'])
+def handle_grant_demo(message):
+    if message.from_user.id != ADMIN_TELEGRAM_ID:
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "⚠️ *Usage:* `/demo <DEVICE_ID>`\nExample: `/demo 815e3ed1ce8d80a8`", parse_mode="Markdown")
+        return
+
+    device_id = args[1].strip()
+    current_time_ms = int(time.time() * 1000)
+    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000) # Exact 24 Hours from current moment
+
+    if db:
+        user_ref = db.collection("users").document(device_id)
+        user_ref.set({
+            "isActive": True,
+            "expiryTimestamp": demo_expiry_ts,
+            "planName": "1_DAY_FREE_TRIAL"
+        }, merge=True)
+
+        bot.reply_to(
+            message,
+            f"✅ *24-HOUR EXTRA DEMO GRANTED!*\n\n"
+            f"📱 *Device ID:* `{device_id}`\n"
+            f"⏳ *Expiry:* 24 Hours from now\n\n"
+            f"_Customer app open karega to 24h countdown live start ho jayega!_",
+            parse_mode="Markdown"
+        )
+    else:
+        bot.reply_to(message, "❌ Firebase connection error!")
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -85,7 +121,7 @@ def handle_start(message):
                     return
 
         bot.send_message(
-            message.chat.id, 
+            message.chat.id,
             "🚖 *Welcome to Rapido Auto Acceptor Bot!*\n\nApp me *Membership Plans* par jaakar plan select karein to buy subscription.",
             parse_mode="Markdown"
         )
