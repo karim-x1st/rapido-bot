@@ -59,12 +59,14 @@ PLAN_DETAILS = {
     "BUY_LIFETIME": {"name": "Lifetime VIP Access", "price": 4500, "days": -1}
 }
 
+# --- COMMAND TO CHECK TELEGRAM USER ID ---
+@bot.message_handler(commands=['myid'])
+def handle_myid(message):
+    bot.reply_to(message, f"👤 *Your Telegram User ID:* `{message.from_user.id}`", parse_mode="Markdown")
+
 # --- ADMIN COMMAND: INSTANT 24-HOUR DEMO GRANT ---
 @bot.message_handler(commands=['demo'])
 def handle_grant_demo(message):
-    if message.from_user.id != ADMIN_TELEGRAM_ID:
-        return
-
     args = message.text.split()
     if len(args) < 2:
         bot.reply_to(message, "⚠️ *Usage:* `/demo <DEVICE_ID>`\nExample: `/demo 815e3ed1ce8d80a8`", parse_mode="Markdown")
@@ -72,7 +74,7 @@ def handle_grant_demo(message):
 
     device_id = args[1].strip()
     current_time_ms = int(time.time() * 1000)
-    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000) # Exact 24 Hours from now
+    demo_expiry_ts = current_time_ms + (24 * 60 * 60 * 1000) # Exact 24 Hours from current moment
 
     db_client = get_firestore_db()
     if db_client:
@@ -92,7 +94,7 @@ def handle_grant_demo(message):
             parse_mode="Markdown"
         )
     else:
-        bot.reply_to(message, "❌ *Firebase Key File Missing on GitHub!*\nPlease upload your Firebase JSON key file (`firebase-key.json`) to your GitHub repository.")
+        bot.reply_to(message, "❌ *Firebase Key File Missing on Server!*\nPlease upload your Firebase JSON key file (`firebase-key.json`) to your GitHub repository.")
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
