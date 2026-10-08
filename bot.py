@@ -17,7 +17,6 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # --- DIRECT GOOGLE FIRESTORE REST API ENGINE (0 JWT / 0 TIME SYNC DEPENDENCY!) ---
 def update_user_subscription(device_id, plan_code, expiry_ts):
     try:
-        # Direct HTTP PATCH to Google Cloud Firestore REST API v1
         url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}?updateMask.fieldPaths=isActive&updateMask.fieldPaths=expiryTimestamp&updateMask.fieldPaths=planName"
         payload = {
             "fields": {
@@ -32,7 +31,6 @@ def update_user_subscription(device_id, plan_code, expiry_ts):
         if resp.status_code in [200, 201]:
             return True, "Success"
 
-        # Fallback Overwrite
         url_no_mask = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/users/{device_id}"
         resp2 = requests.post(url_no_mask, json=payload, timeout=10)
         if resp2.status_code in [200, 201]:
@@ -46,7 +44,7 @@ def update_user_subscription(device_id, plan_code, expiry_ts):
 PLAN_DETAILS = {
     "BUY_7DAYS": {"name": "7 Days Plan", "price": 150, "days": 7},
     "BUY_15DAYS": {"name": "15 Days Pass", "price": 250, "days": 15},
-    "BUY_30DAYS": {"name": "1 Month Plan (30 Days)", "price": 450, "days": 30},
+    "BUY_30DAYS": {"name": "1.5 Months Pass (45 Days)", "price": 450, "days": 45},
     "BUY_LIFETIME": {"name": "Lifetime VIP Access", "price": 4500, "days": -1}
 }
 
@@ -86,7 +84,7 @@ def handle_grant_lifetime(message):
     success, msg = update_user_subscription(device_id, "LIFETIME", -1)
     if success:
         bot.reply_to(
-            message, 
+            message,
             f"👑 LIFETIME VIP ACCESS GRANTED!\n\n"
             f"📱 Device ID: {device_id}\n"
             f"♾️ Expiry: Permanent Lifetime Access (No Expiry)\n\n"
@@ -100,7 +98,7 @@ def handle_grant_lifetime(message):
 def handle_grant_days(message):
     args = message.text.split()
     if len(args) < 3:
-        bot.reply_to(message, "⚠️ Usage: /days <DEVICE_ID> <NUM_DAYS>\nExample: /days 815e3ed1ce8d80a8 30")
+        bot.reply_to(message, "⚠️ Usage: /days <DEVICE_ID> <NUM_DAYS>\nExample: /days 815e3ed1ce8d80a8 45")
         return
     device_id = args[1].strip()
     try:
@@ -111,12 +109,12 @@ def handle_grant_days(message):
 
     current_time_ms = int(time.time() * 1000)
     expiry_ts = current_time_ms + (num_days * 24 * 60 * 60 * 1000)
-    plan_code = "30DAYS" if num_days >= 28 else ("15DAYS" if num_days >= 14 else "7DAYS")
+    plan_code = "BUY_30DAYS" if num_days >= 28 else ("15DAYS" if num_days >= 14 else "7DAYS")
 
     success, msg = update_user_subscription(device_id, plan_code, expiry_ts)
     if success:
         bot.reply_to(
-            message, 
+            message,
             f"✅ {num_days}-DAYS SUBSCRIPTION GRANTED!\n\n"
             f"📱 Device ID: {device_id}\n"
             f"⏳ Expiry: {num_days} Days from current moment"
@@ -137,7 +135,7 @@ def handle_expire_device(message):
     success, msg = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", current_time_ms)
     if success:
         bot.reply_to(
-            message, 
+            message,
             f"🔴 DEVICE EXPIRED & LOCKED!\n\n"
             f"📱 Device ID: {device_id}\n"
             f"🔒 Status: Expired / Inactive"
@@ -161,7 +159,7 @@ def handle_grant_demo(message):
         success, msg = update_user_subscription(device_id, "1_DAY_FREE_TRIAL", demo_expiry_ts)
         if success:
             bot.reply_to(
-                message, 
+                message,
                 f"✅ 24-HOUR EXTRA DEMO GRANTED!\n\n"
                 f"📱 Device ID: {device_id}\n"
                 f"⏳ Expiry: 24 Hours from current moment\n\n"
@@ -216,7 +214,7 @@ def handle_start(message):
                     return
 
         bot.send_message(
-            message.chat.id, 
+            message.chat.id,
             "🚖 Welcome to Rapido Auto Acceptor Bot!\n\nApp me Membership Plans par jaakar plan select karein to buy subscription."
         )
     except Exception as e:
